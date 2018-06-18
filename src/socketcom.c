@@ -24,17 +24,23 @@ void preesm_receive_ack(int socket) {
 /**
  * Send a packet.
  */
-void preesm_send(int targetId, int * socketRegistry, char* buffer, int size) {
+void preesm_send_start(int targetId, int * socketRegistry, char* buffer, int size) {
   int socket = socketRegistry[targetId];
   send(socket, buffer, size, 0);
+}
+void preesm_send_end(int targetId, int * socketRegistry, char* buffer, int size) {
+	preesm_receive_ack(targetId);
 }
 
 /**
  * Receive a packet.
  */
-void preesm_receive(int sourceId, int * socketRegistry, char* buffer, int size) {
+void preesm_receive_start(int sourceId, int * socketRegistry, char* buffer, int size) {
   int socket = socketRegistry[sourceId];
   recv(socket, buffer, size, 0);
+}
+void preesm_receive_end(int sourceId, int * socketRegistry, char* buffer, int size) {
+	preesm_send_ack(sourceId);
 }
 
 /**
@@ -104,7 +110,7 @@ int preesm_listen(ProcessingElement * listener, int numberOfProcessingElements) 
     exit(_PREESM_ERROR_BINDING);
   }
   //listen to all higher IDs
-  listen(sockfd, numberOfProcessingElements - listeningProcessingElementID - 1); 
+  listen(sockfd, numberOfProcessingElements - listeningProcessingElementID - 1);
   return sockfd;
 }
 

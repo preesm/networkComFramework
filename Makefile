@@ -12,7 +12,7 @@ OBJS=$(patsubst $(SRCDIR)/%.c, $(OBJDIR)/%.o, $(SRCS))
 LIBS=-lpthread
 
 CC=gcc
-CFLAGS=-O2 -Wall -Wextra -Werror -I$(INCDIR) -DNB_PE=$(NB_PE)
+CFLAGS=-O2 -Wall -Wextra -Werror -I$(INCDIR) -D_PREESM_NBTHREADS_=$(NB_PE)
 
 all: $(TARGET)
 
