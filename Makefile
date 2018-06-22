@@ -1,5 +1,5 @@
 
-NB_PE=32
+NB_PE=16
 TARGET=networkcom
 
 INCDIR=includes
@@ -12,7 +12,7 @@ OBJS=$(patsubst $(SRCDIR)/%.c, $(OBJDIR)/%.o, $(SRCS))
 LIBS=-lpthread
 
 CC=gcc
-CFLAGS=-O2 -Wall -Wextra -Werror -I$(INCDIR) -D_PREESM_NBTHREADS_=$(NB_PE)
+CFLAGS=-O2 -Wall -Wextra -I$(INCDIR) -D_PREESM_NBTHREADS_=$(NB_PE) 
 
 all: $(TARGET)
 

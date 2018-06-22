@@ -9,14 +9,36 @@ void preesm_send_ack(int socket) {
   send(socket, &ack, sizeof(char), 0);
 }
 
+
+void preesm_poll_socket_read_available(int socket) {
+  int rc;
+  struct pollfd fds[2];
+  int nfds = 1;
+  memset(fds, 0, sizeof(fds));
+  fds[0].fd = socket;
+  fds[0].events = POLLIN;
+  rc = poll(fds, nfds, 0);
+  if (rc < 0) {
+	printf("error while polling\n"); fflush(stdout);
+	exit(_PREESM_ERROR_POLLING);
+  }
+}
+
 /**
  * Receive 1 byte ack and check its value.
  */
 void preesm_receive_ack(int socket) {
   char ack = 0;
+  int count = 0;
+
+  ioctl(socket, FIONREAD, &count);
+  while (count < sizeof(char)) {
+	preesm_poll_socket_read_available(socket);
+    ioctl(socket, FIONREAD, &count);
+  }
   recv(socket, &ack, sizeof(char), 0);
   if (!ack) {
-    printf("error ack ( = %d)\n",ack);
+    printf("error ack ( = %d)\n",ack); fflush(stdout);
     exit(_PREESM_ERROR_ACK);
   }
 }
@@ -24,23 +46,60 @@ void preesm_receive_ack(int socket) {
 /**
  * Send a packet.
  */
-void preesm_send_start(int targetId, int * socketRegistry, char* buffer, int size) {
-  int socket = socketRegistry[targetId];
+void preesm_send(int from, int to, int * socketRegistry, char* buffer, int size, const char* bufferName) {
+  preesm_send_start(from, to, socketRegistry, buffer, size, bufferName);
+  preesm_send_end(from, to, socketRegistry, buffer, size, bufferName);
+}
+void preesm_send_start(int from, int to, int * socketRegistry, char* buffer, int size, const char* bufferName) {
+  int socket = socketRegistry[to];
   send(socket, buffer, size, 0);
 }
-void preesm_send_end(int targetId, int * socketRegistry, char* buffer, int size) {
-	preesm_receive_ack(targetId);
+void preesm_send_end(int from, int to, int * socketRegistry, char* buffer, int size, const char* bufferName) {
 }
+
+
+
 
 /**
  * Receive a packet.
  */
-void preesm_receive_start(int sourceId, int * socketRegistry, char* buffer, int size) {
-  int socket = socketRegistry[sourceId];
+void preesm_receive(int from, int to, int * socketRegistry, char* buffer, int size, const char* bufferName) {
+  preesm_receive_start(from, to, socketRegistry, buffer, size, bufferName);
+  preesm_receive_end(from, to, socketRegistry, buffer, size, bufferName);
+}
+void preesm_receive_start(int from, int to, int * socketRegistry, char* buffer, int size, const char* bufferName) {
+  int socket = socketRegistry[from];
+
+  int count = 0;
+  ioctl(socket, FIONREAD, &count);
+  while (count < size) {
+	preesm_poll_socket_read_available(socket);
+    ioctl(socket, FIONREAD, &count);
+  }
   recv(socket, buffer, size, 0);
 }
-void preesm_receive_end(int sourceId, int * socketRegistry, char* buffer, int size) {
-	preesm_send_ack(sourceId);
+void preesm_receive_end(int from, int to, int * socketRegistry, char* buffer, int size, const char* bufferName) {
+}
+
+void preesm_set_socket_options(int socket) {
+  int rv;
+  int newMaxBuff=_PREESM_SOCKET_BUFFER_SIZE;
+  rv = setsockopt(socket, SOL_SOCKET, SO_SNDBUF, &newMaxBuff, sizeof(newMaxBuff));
+  if (rv != 0) {
+    printf("[PREESM] - Could not set send socket buffer new size [%m]\n"); fflush(stdout);
+    exit(_PREESM_ERROR_CREATE_SOCKET);
+  }
+  rv = setsockopt(socket, SOL_SOCKET, SO_RCVBUF, &newMaxBuff, sizeof(newMaxBuff));
+  if (rv != 0) {
+    printf("[PREESM] - Could not set receive socket buffer new size [%m]\n"); fflush(stdout);
+    exit(_PREESM_ERROR_CREATE_SOCKET);
+  }
+  int flag = 1;
+  rv = setsockopt(socket, IPPROTO_TCP, TCP_NODELAY,(char *) &flag, sizeof(int));
+  if (rv != 0) {
+    printf("[PREESM] - Could not set socket tcp_nodelay [%m]\n"); fflush(stdout);
+    exit(_PREESM_ERROR_CREATE_SOCKET);
+  }
 }
 
 /**
@@ -59,21 +118,22 @@ int preesm_connect(ProcessingElement * to) {
   hints.ai_socktype = SOCK_STREAM;
 
   if ((rv = getaddrinfo(host, portString, &hints, &servinfo)) != 0) {
-    printf("[PREESM] - Could not resolve host [%m]\n");
+    printf("[PREESM] - Could not resolve host [%m]\n"); fflush(stdout);
     exit(_PREESM_ERROR_RESOLVE_HOST);
   }
   if ((sockfd = socket(servinfo->ai_family, servinfo->ai_socktype, servinfo->ai_protocol)) < 0) {
-    printf("[PREESM] - Could not create socket [%m]\n");
+    printf("[PREESM] - Could not create socket [%m]\n"); fflush(stdout);
     exit(_PREESM_ERROR_CREATE_SOCKET);
   }
+
+  preesm_set_socket_options(sockfd);
+
   while (connect(sockfd, servinfo->ai_addr, servinfo->ai_addrlen) < 0) {
     // wait for the server to start
     usleep(_PREESM_WAIT_SERVER_START_US);
   }
-
   preesm_receive_ack(sockfd);
   preesm_send_ack(sockfd);
-
   freeaddrinfo(servinfo);
   return sockfd;
 }
@@ -83,10 +143,19 @@ int preesm_connect(ProcessingElement * to) {
  */
 int preesm_accept(int listeningSocket) {
   struct sockaddr_in clientAddress;
+#ifdef _PREESM_TCP_DEBUG_
+  printf("[TCP-DEBUG] preesm accept\n"); fflush(stdout);
+#endif
   socklen_t clientAddressLength = sizeof(clientAddress);
   int connfd = accept(listeningSocket, (struct sockaddr *)&clientAddress, &clientAddressLength);
+
+  preesm_set_socket_options(connfd);
+
   preesm_send_ack(connfd);
   preesm_receive_ack(connfd);
+#ifdef _PREESM_TCP_DEBUG_
+  printf("[TCP-DEBUG] accepted connection\n"); fflush(stdout);
+#endif
   return connfd;
 }
 
@@ -96,21 +165,30 @@ int preesm_accept(int listeningSocket) {
 int preesm_listen(ProcessingElement * listener, int numberOfProcessingElements) {
   int listeningProcessingElementID = listener->id;
   int port = listener->port;
+#ifdef _PREESM_TCP_DEBUG_
+  printf("[TCP-DEBUG] PE %d opening listen socket on %d\n", listeningProcessingElementID, port); fflush(stdout);
+#endif
   int sockfd = socket(AF_INET, SOCK_STREAM, 0);
   setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &(int){ 1 }, sizeof(int));
+
+  preesm_set_socket_options(sockfd);
+
   if(sockfd < 0) {
-    printf("[PREESM] - Error : Could not create listen socket [%m]\n");
+    printf("[PREESM] - Error : Could not create listen socket [%m]\n"); fflush(stdout);
     exit(_PREESM_ERROR_CREATE_SOCKET);
   }
   listener->listeningIPPort.sin_family = AF_INET;
   listener->listeningIPPort.sin_addr.s_addr = INADDR_ANY;
   listener->listeningIPPort.sin_port = htons(port);
   if (bind(sockfd, (struct sockaddr*)&(listener->listeningIPPort), sizeof(struct sockaddr_in)) < 0) {
-    printf("[PREESM] - Error : Could not binding port %d [%m]\n", port);
+    printf("[PREESM] - Error : Could not binding port %d [%m]\n", port); fflush(stdout);
     exit(_PREESM_ERROR_BINDING);
   }
   //listen to all higher IDs
   listen(sockfd, numberOfProcessingElements - listeningProcessingElementID - 1);
+#ifdef _PREESM_TCP_DEBUG_
+  printf("[TCP-DEBUG] PE %d listening on %d\n", listeningProcessingElementID, port); fflush(stdout);
+#endif
   return sockfd;
 }
 
@@ -118,6 +196,9 @@ int preesm_listen(ProcessingElement * listener, int numberOfProcessingElements) 
  * Open connection to all other processing elements.
  */
 void preesm_open(int* socketFileDescriptors, int processingElementID, int numberOfProcessingElements, ProcessingElement registry[numberOfProcessingElements]) {
+#ifdef _PREESM_TCP_DEBUG_
+  //printf("[TCP-DEBUG] %d opening connections\n", processingElementID); fflush(stdout);
+#endif
   // 1- create listen socket, put it in local array of socket at processingElementID index
   socketFileDescriptors[processingElementID] = preesm_listen(&registry[processingElementID], numberOfProcessingElements);
   if (socketFileDescriptors[processingElementID] == -1) {
@@ -125,19 +206,26 @@ void preesm_open(int* socketFileDescriptors, int processingElementID, int number
   }
   // 2- connect to all other who have lower ID
   for (int i = processingElementID-1; i >= 0 ; i--) {
-    socketFileDescriptors[i] = preesm_connect(&registry[i]);
+	int socket = preesm_connect(&registry[i]);
+    socketFileDescriptors[i] = socket;
   }
   // 3- accept connection from all other who have higher ID
   for (int i = processingElementID+1; i < numberOfProcessingElements; i++) {
     int socket = preesm_accept(socketFileDescriptors[processingElementID]);
     socketFileDescriptors[i] = socket;
   }
+#ifdef _PREESM_TCP_DEBUG_
+  printf("[TCP-DEBUG] %d done open connections\n", processingElementID); fflush(stdout);
+#endif
 }
 
 /**
  * Close connection to all other processing elements.
  */
 void preesm_close(int * socketRegistry, int processingElementID, int numberOfProcessingElements) {
+#ifdef _PREESM_TCP_DEBUG_
+  printf("[TCP-DEBUG] %d closing connections\n", processingElementID); fflush(stdout);
+#endif
   // 1- close "client" connection
   for (int i = processingElementID-1; i >= 0 ; i--) {
     preesm_send_ack(socketRegistry[i]);
@@ -150,6 +238,30 @@ void preesm_close(int * socketRegistry, int processingElementID, int numberOfPro
   }
   // 3- close listening socket
   close(socketRegistry[processingElementID]);
+#ifdef _PREESM_TCP_DEBUG_
+  printf("[TCP-DEBUG] %d done closing connections\n", processingElementID);
+#endif
 }
 
-
+void preesm_barrier(int * socketRegistry, int processingElementID, int numberOfProcessingElements) {
+#ifdef _PREESM_TCP_DEBUG_
+  printf("[TCP-DEBUG] %d at barrier - sync of %d PEs\n", processingElementID, numberOfProcessingElements);
+#endif
+  for (int i = 0; i < numberOfProcessingElements; i++) {
+	if (i != processingElementID)
+      preesm_send_ack(socketRegistry[i]);
+  }
+  for (int i = 0; i < numberOfProcessingElements; i++) {
+	if (i != processingElementID)
+      preesm_receive_ack(socketRegistry[i]);
+  }
+//  for (int i = processingElementID-1; i >= 0 ; i--) {
+//    preesm_send_ack(socketRegistry[i]);
+//  }
+//  for (int i = processingElementID+1; i < numberOfProcessingElements; i++) {
+//    preesm_receive_ack(socketRegistry[i]);
+//  }
+#ifdef _PREESM_TCP_DEBUG_
+  printf("[TCP-DEBUG] %d PAAASSSSSEEEEDDD barrier\n", processingElementID);
+#endif
+}
