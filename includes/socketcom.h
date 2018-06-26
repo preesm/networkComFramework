@@ -33,7 +33,6 @@ typedef struct processingElement_t {
   int id;
   char* host;
   int port;
-  struct sockaddr_in listeningIPPort;
 } ProcessingElement;
 
 void preesm_send(int from, int to, int * socketRegistry, char* buffer, int size, const char* bufferName);

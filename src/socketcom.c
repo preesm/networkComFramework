@@ -177,10 +177,11 @@ int preesm_listen(ProcessingElement * listener, int numberOfProcessingElements) 
     printf("[PREESM] - Error : Could not create listen socket [%m]\n"); fflush(stdout);
     exit(_PREESM_ERROR_CREATE_SOCKET);
   }
-  listener->listeningIPPort.sin_family = AF_INET;
-  listener->listeningIPPort.sin_addr.s_addr = INADDR_ANY;
-  listener->listeningIPPort.sin_port = htons(port);
-  if (bind(sockfd, (struct sockaddr*)&(listener->listeningIPPort), sizeof(struct sockaddr_in)) < 0) {
+  struct sockaddr_in listeningIPPort;
+  listeningIPPort.sin_family = AF_INET;
+  listeningIPPort.sin_addr.s_addr = INADDR_ANY;
+  listeningIPPort.sin_port = htons(port);
+  if (bind(sockfd, (struct sockaddr*)&(listeningIPPort), sizeof(struct sockaddr_in)) < 0) {
     printf("[PREESM] - Error : Could not binding port %d [%m]\n", port); fflush(stdout);
     exit(_PREESM_ERROR_BINDING);
   }
