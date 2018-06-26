@@ -1,5 +1,5 @@
 
-NB_PE=40
+NB_PE=64
 TARGET=networkcom
 
 INCDIR=includes
@@ -12,7 +12,9 @@ OBJS=$(patsubst $(SRCDIR)/%.c, $(OBJDIR)/%.o, $(SRCS))
 LIBS=-lpthread
 
 CC=gcc
-CFLAGS=-O2 -Wall -Wextra -I$(INCDIR) -D_PREESM_NBTHREADS_=$(NB_PE) 
+CFLAGS=-O2  -I$(INCDIR) -D_PREESM_NBTHREADS_=$(NB_PE)  -Wno-unused-result
+# -D_PREESM_TCP_DEBUG_
+#-Wall -Wextra
 
 all: $(TARGET)
 

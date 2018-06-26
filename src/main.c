@@ -6,18 +6,13 @@
 
 #include "socketcom.h"
 #include <pthread.h>
-
-#define PREESM_COM_PORT 25400
-#define NBLOOP 50
-#define arraysize (200*1024)
-
-
-ProcessingElement registry[_PREESM_NBTHREADS_];
-
-
 #include <execinfo.h>
 #include <signal.h>
 
+#define NBLOOP 20
+#define arraysize (200*1024)
+
+ProcessingElement registry[_PREESM_NBTHREADS_];
 
 void handler(int sig) {
   void *array[10];
@@ -28,12 +23,9 @@ void handler(int sig) {
   exit(1);
 }
 
-
-
 void* computationThread_Core0(void *arg) {
   int* socketRegistry = (int*)arg;
   int processingElementID = socketRegistry[_PREESM_NBTHREADS_];
-  // does nothing
   for (int timeLoop = 0; timeLoop < NBLOOP; timeLoop++) {
     preesm_barrier(socketRegistry, processingElementID, _PREESM_NBTHREADS_);
     char somedata[arraysize];
@@ -60,7 +52,6 @@ void* computationThread_Core0(void *arg) {
 void* computationThread_Core1(void *arg) {
   int* socketRegistry = (int*)arg;
   int processingElementID = socketRegistry[_PREESM_NBTHREADS_];
-  // does nothing
   for (int timeLoop = 0; timeLoop < NBLOOP; timeLoop++) {
     preesm_barrier(socketRegistry, processingElementID, _PREESM_NBTHREADS_);
     char somedata[arraysize];
@@ -73,7 +64,6 @@ void* computationThread_Core1(void *arg) {
 void* computationThread_Core2(void *arg) {
   int* socketRegistry = (int*)arg;
   int processingElementID = socketRegistry[_PREESM_NBTHREADS_];
-  // does nothing
   for (int timeLoop = 0; timeLoop < NBLOOP; timeLoop++) {
     preesm_barrier(socketRegistry, processingElementID, _PREESM_NBTHREADS_);
     char somedata[arraysize];
@@ -88,7 +78,6 @@ void* computationThread_Core2(void *arg) {
 void* computationThread_Core3(void *arg) {
   int* socketRegistry = (int*)arg;
   int processingElementID = socketRegistry[_PREESM_NBTHREADS_];
-  // does nothing
   for (int timeLoop = 0; timeLoop < NBLOOP; timeLoop++) {
     preesm_barrier(socketRegistry, processingElementID, _PREESM_NBTHREADS_);
     
@@ -106,7 +95,6 @@ void* computationThread_Core3(void *arg) {
     unsigned char somedata2[arraysize];
     preesm_receive_start(processingElementID-3,processingElementID,socketRegistry, (char*)&somedata1, arraysize, "test");
     preesm_receive_start(processingElementID-1,processingElementID,socketRegistry, (char*)&somedata2, arraysize, "test");
-    //printf("%d - %d - %d\n",data[0], somedata1[0],somedata2[0]);
     if (somedata2[0] != somedata1[0]) {
       exit(-1);
     }
@@ -118,21 +106,16 @@ void* computationThread_Core3(void *arg) {
   return NULL;
 }
 
-
 void *(*coreThreadComputations[_PREESM_NBTHREADS_])(void *);
-
-
-//pthread_barrier_t iter_barrier;
-//int stopThreads;
 
 void actualThreadComputations(int processingElementID) {
   int socketFileDescriptors[_PREESM_NBTHREADS_ + 1];
   socketFileDescriptors[_PREESM_NBTHREADS_] = processingElementID;
 
   preesm_open(socketFileDescriptors, processingElementID, _PREESM_NBTHREADS_, registry);
-#ifdef _PREESM_TCP_DEBUG_
+//#ifdef _PREESM_TCP_DEBUG_
   printf("[TCP-DEBUG] %d READY\n", processingElementID);
-#endif
+//#endif
   coreThreadComputations[processingElementID](socketFileDescriptors);
 #ifdef _PREESM_TCP_DEBUG_
   printf("[TCP-DEBUG] %d DONE\n", processingElementID);
@@ -146,8 +129,12 @@ void * threadComputations (void *arg) {
   return NULL;
 }
 
-int main(int argc, char** argv) {
-//  stopThreads = 0;
+void init() {
+  if (_PREESM_NBTHREADS_ % 4 != 0) {
+    printf("Error: number of PE should be multiple of 4\n");
+    exit(-1);
+  }
+  
   signal(SIGSEGV, handler);
   signal(SIGPIPE, handler);
   signal(SIGKILL, handler);
@@ -159,24 +146,50 @@ int main(int argc, char** argv) {
     coreThreadComputations[i+2] = &computationThread_Core2;
     coreThreadComputations[i+3] = &computationThread_Core3;
   }
+}
 
-  // TODO overide pes array with values from config file/arguments
-  for (int i = 0; i < _PREESM_NBTHREADS_; i++) {
-    registry[i].id = i;
-    registry[i].host = "127.0.0.1";
-    registry[i].port=(PREESM_COM_PORT+i);
+void initMainPEConfig(ProcessingElement registry[_PREESM_NBTHREADS_]) {
+  char * buffer = 0;
+  long length;
+  FILE * f = fopen ("socketcom.conf", "r");
+  if (f) {
+    fseek (f, 0, SEEK_END);
+    length = ftell (f);
+    fseek (f, 0, SEEK_SET);
+    buffer = malloc (length);
+    if (buffer) {
+      fread (buffer, 1, length, f);
+    }
+    fclose (f);
+    char *r = buffer;
+    char *tok = r, *end = r;
+    strsep(&end, ":");
+    char* host = strdup(tok);
+    tok = end;
+    strsep(&end, ":");
+    char* portStr  = tok;
+    int port = atoi(portStr);
+    free(r);
+    strcpy(registry[0].host,host);
+    registry[0].port = port;
+  } else {
+    printf("ERROR: Could not locate file 'socketcom.conf'\n");
+    exit(-1);
   }
+}
+int main(int argc, char** argv) {
+  // 1- init
+  init();
+  
+  // 2- read main Core IP and Port
+  initMainPEConfig(registry);
+  
   if (argc == 2) {
     // read ID from arguments
     int peId = atoi(argv[1]);
-#ifdef _PREESM_TCP_DEBUG_
-  printf("[TCP-DEBUG] Runnin %d only\n", peId);
-#endif
-
-//    pthread_barrier_init(&iter_barrier, NULL, 1);
+    printf("[TCP-DEBUG] Runnin %d only\n", peId);
     actualThreadComputations(peId);
   } else {
-//	pthread_barrier_init(&iter_barrier, NULL, _PREESM_NBTHREADS_);
     // launch all IDs in separate threads
     pthread_t threads[_PREESM_NBTHREADS_];
     int threadArguments[_PREESM_NBTHREADS_];
@@ -189,6 +202,7 @@ int main(int argc, char** argv) {
       pthread_join(threads[i], NULL);
     }
   }
+  //*/
   return 0;
 }
 
