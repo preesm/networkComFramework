@@ -1,5 +1,5 @@
 
-NB_PE=16
+NB_PE=40
 TARGET=networkcom
 
 INCDIR=includes
@@ -29,12 +29,12 @@ clean:
 	rm -rvf $(TARGET) $(OBJS) $(OBJDIR)
 
 test: clean $(TARGET)
-	#ulimit -n 8192
+	ulimit -n 8192
 	./$(TARGET)
 	@echo "\n - Success\n"
 
 repeat:
-	#ulimit -n 8192
+	ulimit -n 8192
 	set -e
 	while true; do clear && make test && echo "------" || exit 1; sleep 0; done
 

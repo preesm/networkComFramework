@@ -255,12 +255,6 @@ void preesm_barrier(int * socketRegistry, int processingElementID, int numberOfP
 	if (i != processingElementID)
       preesm_receive_ack(socketRegistry[i]);
   }
-//  for (int i = processingElementID-1; i >= 0 ; i--) {
-//    preesm_send_ack(socketRegistry[i]);
-//  }
-//  for (int i = processingElementID+1; i < numberOfProcessingElements; i++) {
-//    preesm_receive_ack(socketRegistry[i]);
-//  }
 #ifdef _PREESM_TCP_DEBUG_
   printf("[TCP-DEBUG] %d PAAASSSSSEEEEDDD barrier\n", processingElementID);
 #endif

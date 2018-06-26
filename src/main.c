@@ -8,6 +8,9 @@
 #include <pthread.h>
 
 #define PREESM_COM_PORT 25400
+#define NBLOOP 5
+#define arraysize (200*1024)
+
 
 ProcessingElement registry[_PREESM_NBTHREADS_];
 
@@ -30,9 +33,6 @@ void preesm_send_end(int from, int to, int * socketRegistry, char* buffer, int s
 void preesm_receive_start(int from, int to, int * socketRegistry, char* buffer, int size, const char* bufferName);
 void preesm_receive_end(int from, int to, int * socketRegistry, char* buffer, int size, const char* bufferName);
 
-#define NBLOOP 90000
-#define arraysize (2*1024*1024)
-//(300*1024)
 
 void* computationThread_Core0(void *arg) {
   int* socketRegistry = (int*)arg;

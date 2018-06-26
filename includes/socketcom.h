@@ -36,15 +36,11 @@ typedef struct processingElement_t {
   struct sockaddr_in listeningIPPort;
 } ProcessingElement;
 
-
 void preesm_send(int from, int to, int * socketRegistry, char* buffer, int size, const char* bufferName);
-void preesm_receive(int from, int to, int * socketRegistry, char* buffer, int size, const char* bufferName);
-
-
-
 void preesm_send_start(int from, int to, int * socketRegistry, char* buffer, int size, const char* bufferName);
 void preesm_send_end(int from, int to, int * socketRegistry, char* buffer, int size, const char* bufferName);
 
+void preesm_receive(int from, int to, int * socketRegistry, char* buffer, int size, const char* bufferName);
 void preesm_receive_start(int from, int to, int * socketRegistry, char* buffer, int size, const char* bufferName);
 void preesm_receive_end(int from, int to, int * socketRegistry, char* buffer, int size, const char* bufferName);
 
