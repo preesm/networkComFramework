@@ -29,12 +29,12 @@ clean:
 	rm -rvf $(TARGET) $(OBJS) $(OBJDIR)
 
 test: clean $(TARGET)
-	ulimit -n 8192
+	#ulimit -n 8192
 	./$(TARGET)
 	@echo "\n - Success\n"
 
 repeat:
-	ulimit -n 8192
+	#ulimit -n 8192
 	set -e
 	while true; do clear && make test && echo "------" || exit 1; sleep 0; done
 
@@ -43,6 +43,7 @@ valgrind: clean $(TARGET)
 	@echo "\n - Success\n"
 
 testMP: clean $(TARGET)
+	#ulimit -n $(NB_PE)0
 	./runMP.sh $(TARGET) $(NB_PE)
 	@echo "\n - Success\n"
 

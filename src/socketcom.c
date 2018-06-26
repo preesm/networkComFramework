@@ -2,14 +2,8 @@
 #include "socketcom.h"
 
 /**
- * Send 1 byte ack.
+ * Poll a socket : blocks until some data arrive (POLLIN) on the socket.
  */
-void preesm_send_ack(int socket) {
-  char ack = 1;
-  send(socket, &ack, sizeof(char), 0);
-}
-
-
 void preesm_poll_socket_read_available(int socket) {
   int rc;
   struct pollfd fds[2];
@@ -19,21 +13,31 @@ void preesm_poll_socket_read_available(int socket) {
   fds[0].events = POLLIN;
   rc = poll(fds, nfds, 0);
   if (rc < 0) {
-	printf("error while polling\n"); fflush(stdout);
-	exit(_PREESM_ERROR_POLLING);
+    printf("error while polling\n"); fflush(stdout);
+    exit(_PREESM_ERROR_POLLING);
   }
 }
 
 /**
- * Receive 1 byte ack and check its value.
+ * Send 1 byte ack with value 1. Non-blocking.
+ */
+void preesm_send_ack(int socket) {
+  char ack = 1;
+  send(socket, &ack, sizeof(char), 0);
+}
+
+/**
+ * Receive 1 byte ack and check its value is 1. Blocking.
  */
 void preesm_receive_ack(int socket) {
   char ack = 0;
   int count = 0;
 
+  // check how many bytes are available for read on the socket;
   ioctl(socket, FIONREAD, &count);
+  // if not enough bytes are available, block until data arrive, then recheck
   while (count < sizeof(char)) {
-	preesm_poll_socket_read_available(socket);
+    preesm_poll_socket_read_available(socket);
     ioctl(socket, FIONREAD, &count);
   }
   recv(socket, &ack, sizeof(char), 0);
@@ -44,12 +48,8 @@ void preesm_receive_ack(int socket) {
 }
 
 /**
- * Send a packet.
+ * Send a packet. Non-blocking.
  */
-void preesm_send(int from, int to, int * socketRegistry, char* buffer, int size, const char* bufferName) {
-  preesm_send_start(from, to, socketRegistry, buffer, size, bufferName);
-  preesm_send_end(from, to, socketRegistry, buffer, size, bufferName);
-}
 void preesm_send_start(int from, int to, int * socketRegistry, char* buffer, int size, const char* bufferName) {
   int socket = socketRegistry[to];
   send(socket, buffer, size, 0);
@@ -57,23 +57,18 @@ void preesm_send_start(int from, int to, int * socketRegistry, char* buffer, int
 void preesm_send_end(int from, int to, int * socketRegistry, char* buffer, int size, const char* bufferName) {
 }
 
-
-
-
 /**
- * Receive a packet.
+ * Receive a packet. Blocking.
  */
-void preesm_receive(int from, int to, int * socketRegistry, char* buffer, int size, const char* bufferName) {
-  preesm_receive_start(from, to, socketRegistry, buffer, size, bufferName);
-  preesm_receive_end(from, to, socketRegistry, buffer, size, bufferName);
-}
 void preesm_receive_start(int from, int to, int * socketRegistry, char* buffer, int size, const char* bufferName) {
   int socket = socketRegistry[from];
 
   int count = 0;
+  // check how many bytes are available for read on the socket;
   ioctl(socket, FIONREAD, &count);
+  // if not enough bytes are available, block until data arrive, then recheck
   while (count < size) {
-	preesm_poll_socket_read_available(socket);
+    preesm_poll_socket_read_available(socket);
     ioctl(socket, FIONREAD, &count);
   }
   recv(socket, buffer, size, 0);
@@ -81,21 +76,42 @@ void preesm_receive_start(int from, int to, int * socketRegistry, char* buffer, 
 void preesm_receive_end(int from, int to, int * socketRegistry, char* buffer, int size, const char* bufferName) {
 }
 
+/**
+ * Set some options to the socket:
+ *  - send buffer size
+ *  - receive buffer size
+ *  - no delay
+ *  - quick ack
+ *  read :
+ *  - https://stackoverflow.com/questions/7286592/set-tcp-quickack-and-tcp-nodelay
+ *  - https://eklitzke.org/the-caveats-of-tcp-nodelay
+ *  - https://www.extrahop.com/company/blog/2016/tcp-nodelay-nagle-quickack-best-practices/
+ */
 void preesm_set_socket_options(int socket) {
   int rv;
   int newMaxBuff=_PREESM_SOCKET_BUFFER_SIZE;
+  // set send buffer size
   rv = setsockopt(socket, SOL_SOCKET, SO_SNDBUF, &newMaxBuff, sizeof(newMaxBuff));
   if (rv != 0) {
     printf("[PREESM] - Could not set send socket buffer new size [%m]\n"); fflush(stdout);
     exit(_PREESM_ERROR_CREATE_SOCKET);
   }
+  // set receive buffer size
   rv = setsockopt(socket, SOL_SOCKET, SO_RCVBUF, &newMaxBuff, sizeof(newMaxBuff));
   if (rv != 0) {
     printf("[PREESM] - Could not set receive socket buffer new size [%m]\n"); fflush(stdout);
     exit(_PREESM_ERROR_CREATE_SOCKET);
   }
   int flag = 1;
+  // set TCP_NODELAY
   rv = setsockopt(socket, IPPROTO_TCP, TCP_NODELAY,(char *) &flag, sizeof(int));
+  if (rv != 0) {
+    printf("[PREESM] - Could not set socket tcp_nodelay [%m]\n"); fflush(stdout);
+    exit(_PREESM_ERROR_CREATE_SOCKET);
+  }
+  // set TCP_QUICKACK
+  // flag still = 1
+  rv = setsockopt(socket, IPPROTO_TCP, TCP_QUICKACK,(char *) &flag, sizeof(int));
   if (rv != 0) {
     printf("[PREESM] - Could not set socket tcp_nodelay [%m]\n"); fflush(stdout);
     exit(_PREESM_ERROR_CREATE_SOCKET);
@@ -198,7 +214,7 @@ int preesm_listen(ProcessingElement * listener, int numberOfProcessingElements) 
  */
 void preesm_open(int* socketFileDescriptors, int processingElementID, int numberOfProcessingElements, ProcessingElement registry[numberOfProcessingElements]) {
 #ifdef _PREESM_TCP_DEBUG_
-  //printf("[TCP-DEBUG] %d opening connections\n", processingElementID); fflush(stdout);
+  printf("[TCP-DEBUG] %d opening connections\n", processingElementID); fflush(stdout);
 #endif
   // 1- create listen socket, put it in local array of socket at processingElementID index
   socketFileDescriptors[processingElementID] = preesm_listen(&registry[processingElementID], numberOfProcessingElements);
@@ -244,6 +260,9 @@ void preesm_close(int * socketRegistry, int processingElementID, int numberOfPro
 #endif
 }
 
+/**
+ * Barrier using TCP consists in sending an ACK to everyone then block on the receive of everyone ACK;
+ */
 void preesm_barrier(int * socketRegistry, int processingElementID, int numberOfProcessingElements) {
 #ifdef _PREESM_TCP_DEBUG_
   printf("[TCP-DEBUG] %d at barrier - sync of %d PEs\n", processingElementID, numberOfProcessingElements);
@@ -257,6 +276,6 @@ void preesm_barrier(int * socketRegistry, int processingElementID, int numberOfP
       preesm_receive_ack(socketRegistry[i]);
   }
 #ifdef _PREESM_TCP_DEBUG_
-  printf("[TCP-DEBUG] %d PAAASSSSSEEEEDDD barrier\n", processingElementID);
+  printf("[TCP-DEBUG] %d Passed barrier\n", processingElementID);
 #endif
 }

@@ -8,7 +8,7 @@
 #include <pthread.h>
 
 #define PREESM_COM_PORT 25400
-#define NBLOOP 5
+#define NBLOOP 50
 #define arraysize (200*1024)
 
 
@@ -28,10 +28,6 @@ void handler(int sig) {
   exit(1);
 }
 
-void preesm_send_start(int from, int to, int * socketRegistry, char* buffer, int size, const char* bufferName);
-void preesm_send_end(int from, int to, int * socketRegistry, char* buffer, int size, const char* bufferName);
-void preesm_receive_start(int from, int to, int * socketRegistry, char* buffer, int size, const char* bufferName);
-void preesm_receive_end(int from, int to, int * socketRegistry, char* buffer, int size, const char* bufferName);
 
 
 void* computationThread_Core0(void *arg) {
@@ -47,12 +43,12 @@ void* computationThread_Core0(void *arg) {
     somedata[2] = (value >> 16) % 256;
     somedata[3] = (value >> 24) % 256;
     
-    preesm_send(processingElementID,processingElementID+1,socketRegistry, (char*)&somedata, arraysize, "test");
-    preesm_send(processingElementID,processingElementID+3,socketRegistry, (char*)&somedata, arraysize, "test");
+    preesm_send_start(processingElementID,processingElementID+1,socketRegistry, (char*)&somedata, arraysize, "test");
+    preesm_send_start(processingElementID,processingElementID+3,socketRegistry, (char*)&somedata, arraysize, "test");
     
     
     char data[4];
-    preesm_receive(processingElementID+3,processingElementID,socketRegistry, (char*)&data, 4, "test");
+    preesm_receive_start(processingElementID+3,processingElementID,socketRegistry, (char*)&data, 4, "test");
     if (data[0] != somedata[0]) {
       exit(-1);
     }
@@ -68,8 +64,8 @@ void* computationThread_Core1(void *arg) {
   for (int timeLoop = 0; timeLoop < NBLOOP; timeLoop++) {
     preesm_barrier(socketRegistry, processingElementID, _PREESM_NBTHREADS_);
     char somedata[arraysize];
-    preesm_receive(processingElementID-1,processingElementID,socketRegistry, (char*)&somedata, arraysize, "test");
-    preesm_send(processingElementID,processingElementID+1,socketRegistry, (char*)&somedata, arraysize, "test");
+    preesm_receive_start(processingElementID-1,processingElementID,socketRegistry, (char*)&somedata, arraysize, "test");
+    preesm_send_start(processingElementID,processingElementID+1,socketRegistry, (char*)&somedata, arraysize, "test");
   }
   preesm_barrier(socketRegistry, processingElementID, _PREESM_NBTHREADS_);
   return NULL;
@@ -82,8 +78,8 @@ void* computationThread_Core2(void *arg) {
     preesm_barrier(socketRegistry, processingElementID, _PREESM_NBTHREADS_);
     char somedata[arraysize];
     
-    preesm_receive(processingElementID-1,processingElementID,socketRegistry, (char*)&somedata, arraysize, "test");
-    preesm_send(processingElementID,processingElementID+1,socketRegistry, (char*)&somedata, arraysize, "test");
+    preesm_receive_start(processingElementID-1,processingElementID,socketRegistry, (char*)&somedata, arraysize, "test");
+    preesm_send_start(processingElementID,processingElementID+1,socketRegistry, (char*)&somedata, arraysize, "test");
     
   }
   preesm_barrier(socketRegistry, processingElementID, _PREESM_NBTHREADS_);
@@ -104,12 +100,12 @@ void* computationThread_Core3(void *arg) {
     data[2] = (value >> 16) % 256;
     data[3] = (value >> 24) % 256;
     
-    preesm_send(processingElementID,processingElementID-3,socketRegistry, (char*)&data, 4, "test");
+    preesm_send_start(processingElementID,processingElementID-3,socketRegistry, (char*)&data, 4, "test");
     
     unsigned char somedata1[arraysize];
     unsigned char somedata2[arraysize];
-    preesm_receive(processingElementID-3,processingElementID,socketRegistry, (char*)&somedata1, arraysize, "test");
-    preesm_receive(processingElementID-1,processingElementID,socketRegistry, (char*)&somedata2, arraysize, "test");
+    preesm_receive_start(processingElementID-3,processingElementID,socketRegistry, (char*)&somedata1, arraysize, "test");
+    preesm_receive_start(processingElementID-1,processingElementID,socketRegistry, (char*)&somedata2, arraysize, "test");
     //printf("%d - %d - %d\n",data[0], somedata1[0],somedata2[0]);
     if (somedata2[0] != somedata1[0]) {
       exit(-1);
