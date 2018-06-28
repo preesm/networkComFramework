@@ -32,6 +32,7 @@
 #define _PREESM_ERROR_POLLING 5
 
 typedef struct processingElement_t {
+  int id;
   char host[255];
   int port;
 } ProcessingElement;

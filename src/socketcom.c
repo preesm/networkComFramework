@@ -1,13 +1,17 @@
 
 #include "socketcom.h"
 
+/**
+ * Debug function
+ */
 void printRegistry(int numberOfProcessingElements, ProcessingElement registry[numberOfProcessingElements]) {
   printf("--\n");
   printf("-- Registry\n");
   for (int i = 0; i < numberOfProcessingElements; i++) {
     char* host= registry[i].host;
     int port = registry[i].port;
-    printf(" ID = %3d\t HOST = %15s\t PORT = %5d\n",i,host,port);
+    int id = registry[i].id;
+    printf(" ID = %3d (%3d)\t HOST = %15s\t PORT = %5d\n",id, i,host,port);
   }
   printf("--\n");
 }
@@ -132,9 +136,14 @@ void preesm_set_socket_options(int socket) {
 /**
  * Open client connection.
  */
-int preesm_connect(ProcessingElement * to) {
+int preesm_connect(int from, ProcessingElement * to) {
   char* host = to->host;
   int port = to->port;
+  int id = to->id;
+#ifdef _PREESM_TCP_DEBUG_
+  printf("[TCP-DEBUG] %d connects to %d (%s:%d)\n", from, id, host, port); fflush(stdout);
+#endif
+
   char portString[6];
   sprintf(portString,"%d",port);
   int sockfd;
@@ -156,6 +165,9 @@ int preesm_connect(ProcessingElement * to) {
   preesm_set_socket_options(sockfd);
 
   while (connect(sockfd, servinfo->ai_addr, servinfo->ai_addrlen) < 0) {
+#ifdef _PREESM_TCP_DEBUG_
+  printf("[TCP-DEBUG] %d connects to %d -- Waiting %d us [%m]\n", from, id, _PREESM_WAIT_SERVER_START_US); fflush(stdout);
+#endif
     // wait for the server to start
     usleep(_PREESM_WAIT_SERVER_START_US);
   }
@@ -272,6 +284,7 @@ void preesm_open_main(int* socketFileDescriptors, int processingElementID, int n
     socklen_t clientAddressLength = sizeof(clientAddress);
     getpeername(socket, (struct sockaddr *)&clientAddress, &clientAddressLength);
     char *ip = inet_ntoa(clientAddress.sin_addr);
+    registry[id].id = id;
     registry[id].port = port;
     strcpy(registry[id].host, ip);
     socketFileDescriptors[id] = socket;
@@ -292,7 +305,7 @@ void preesm_open_secondaries(int* socketFileDescriptors, int processingElementID
   // 1- Main PE creates socket
   
   // 2- connect to main
-	int socket = preesm_connect(&registry[0]);
+	int socket = preesm_connect(processingElementID, &registry[0]);
   socketFileDescriptors[0] = socket;
   
   // 3- bind port
@@ -315,7 +328,7 @@ void preesm_open_secondaries(int* socketFileDescriptors, int processingElementID
   while (count < sizeof(ProcessingElement)*numberOfProcessingElements) {
     preesm_poll_socket_read_available(socket);
     ioctl(socket, FIONREAD, &count);
-  }+
+  }
   recv(socket, registry, sizeof(ProcessingElement)*numberOfProcessingElements, 0);
   
   preesm_send_ack(socket);
@@ -327,7 +340,7 @@ void preesm_open_secondaries(int* socketFileDescriptors, int processingElementID
   
   // 6- connect to all other who have lower ID
   for (int i = processingElementID-1; i > 0 ; i--) {
-    socketFileDescriptors[i] = preesm_connect(&registry[i]);
+    socketFileDescriptors[i] = preesm_connect(processingElementID, &registry[i]);
   }
   // 7- accept connection from all other who have higher ID
   for (int i = processingElementID+1; i < numberOfProcessingElements; i++) {
@@ -341,7 +354,7 @@ void preesm_open(int* socketFileDescriptors, int processingElementID, int number
     preesm_open_secondaries(socketFileDescriptors, processingElementID, numberOfProcessingElements, registry);
   }
   
-  /*
+#ifdef _PREESM_TCP_DEBUG_
   // test that the processing element #i has the proper id;
   for (int i = 0; i < numberOfProcessingElements; i++) {
     if (i != processingElementID)
@@ -353,11 +366,11 @@ void preesm_open(int* socketFileDescriptors, int processingElementID, int number
       preesm_receive_start(i, processingElementID, socketFileDescriptors, (char*)&id, sizeof(int), "");
       if (id != i) {
         printf("\n ** ERROR from %d ** \n", processingElementID);fflush(stdout);
-        //exit(-1);
+        exit(-1);
       }
     }
   }
-  //*/
+#endif
 }
 
 
