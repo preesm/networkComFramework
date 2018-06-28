@@ -31,16 +31,16 @@ function remote_exec() {
   IP=$1
   USR=$(cat $CONFIG_FILE | grep $IP | cut -d':' -f3 | sort -u | head -n 1)
   COMMAND="${@:2}"
-  
+
   # create tmp files on both sides
   LOCALTMP=$(mktemp)
   REMOTETMP=$(ssh -i ${SSHKEYFILE} ${USR}@${IP} /bin/bash -c "mktemp")
-  
+
   # init local script then transfer it
   echo "$COMMAND" > ${LOCALTMP}
   scp -q -i ${SSHKEYFILE} ${LOCALTMP} ${USR}@${IP}:${REMOTETMP}
   ssh -i ${SSHKEYFILE} ${USR}@${IP} chmod 777 ${REMOTETMP}
-  
+
   # exec script
   echo "[REMOTE - START] $COMMAND"
   set +e
@@ -48,27 +48,30 @@ function remote_exec() {
   RES=$?
   set -e
   echo "[REMOTE - EXIT (${RES})] $COMMAND"
-  
+
   # cleanup
   ssh -i ${SSHKEYFILE} ${USR}@${IP} rm ${REMOTETMP}
   rm ${LOCALTMP}
-  
+
   return ${RES}
 }
 
 function isIpLocal() {
   ARG_IP=$1
   LOCAL_IPS=$(hostname -I)
-  IP_IS_SAME=$(echo $ARG_IP | sed 's/\(127\..*\)/\1/g' | wc -l)
-  if [ "$IP_IS_SAME" == "0" ]; then
+
+  if [[ $ARG_IP =~ ^127\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    echo 1
+  else
+    IP_IS_SAME=0
     for LOCAL_IP in $LOCAL_IPS; do
       if [ "$LOCAL_IP" == "$ARG_IP" ]; then
         IP_IS_SAME=1
         break;
       fi
     done
+    echo $IP_IS_SAME
   fi
-  echo $IP_IS_SAME
 }
 
 function select_cp() {
@@ -91,7 +94,7 @@ MAIN_PE_HOST=$(cat $CONFIG_FILE | head -n 1 | cut -d':' -f1 | xargs)
 PE_HOST_LIST=$(cat $CONFIG_FILE | tail -n +2 | cut -d':' -f2 | grep -v ${MAIN_PE_HOST} | sort -u | xargs)
 
 # generate dedicated private key
-[ ! -e ${SSHKEYFILE} ] && ssh-keygen -f ${SSHKEYFILE} -t rsa -N ''  
+[ ! -e ${SSHKEYFILE} ] && ssh-keygen -f ${SSHKEYFILE} -t rsa -N ''
 
 # setup public SSH key on remote hosts (may require password)
 for IP in $PE_HOST_LIST $MAIN_PE_HOST; do
@@ -151,4 +154,3 @@ echo waitin...
 for i in $(seq 0 $((NB_PE - 1))); do
   wait
 done
-
