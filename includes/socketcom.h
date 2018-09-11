@@ -33,7 +33,7 @@
 
 typedef struct processingElement_t {
   int id;
-  char* host;
+  char host[255];
   int port;
 } ProcessingElement;
 
