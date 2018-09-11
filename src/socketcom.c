@@ -125,12 +125,14 @@ void preesm_set_socket_options(int socket) {
     exit(_PREESM_ERROR_CREATE_SOCKET);
   }
   // set TCP_QUICKACK
+#ifndef __APPLE__
   // flag still = 1
   rv = setsockopt(socket, IPPROTO_TCP, TCP_QUICKACK,(char *) &flag, sizeof(int));
   if (rv != 0) {
     printf("[PREESM] - Could not set socket tcp_nodelay [%m]\n"); fflush(stdout);
     exit(_PREESM_ERROR_CREATE_SOCKET);
   }
+#endif
 }
 
 /**
