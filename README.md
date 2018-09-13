@@ -1,1 +1,1 @@
-Since this commit (https://github.com/preesm/preesm/commit/47cb651a204dde6b3c8542145defd270f60ec1e6), socket communication lib is included in Preesm source tree.
+Since this commit (https://github.com/preesm/preesm/commit/5911e70a48b6eb63b1b234cf0b02f5f38e54bc9f), socket communication lib is included in Preesm source tree.
